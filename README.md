@@ -44,7 +44,7 @@ payment := gosirix.Payment{
   ...
 }
 
-resp, err := gc,CreatePayment(payment)
+resp, err := gc.CreatePayment(payment)
 if err != nil {
   // do something with this error
 }

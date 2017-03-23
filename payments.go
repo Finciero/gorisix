@@ -16,21 +16,21 @@ type PaymentsService struct {
 }
 
 // NewPaymentService ...
-func NewPaymentService(secret string, receiverID int) *PaymentsService {
+func NewPaymentService(secret string, receiverID string) *PaymentsService {
 	client := httpClient{
 		client: &http.Client{},
 		secret: secret,
-		recid:  receiverID,
+		key:    receiverID,
 	}
 	return &PaymentsService{&client}
 }
 
 // ReceiverID ...
-func (ps *PaymentsService) ReceiverID() int { return ps.client.recid }
+func (ps *PaymentsService) ReceiverID() string { return ps.client.key }
 
 // Payment returns information of the payment with the given id.
 func (ps *PaymentsService) Payment(id string) (*PaymentResponse, error) {
-	resp, err := ps.client.Get("/payments/"+id, nil)
+	resp, err := ps.client.Get("/merchant/order/"+id, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -39,6 +39,20 @@ func (ps *PaymentsService) Payment(id string) (*PaymentResponse, error) {
 		return nil, err
 	}
 	return &pr, nil
+}
+
+// Payment returns information of the payment with the given id.
+func (ps *PaymentsService) Payments() ([]*PaymentResponse, error) {
+	resp, err := ps.client.Get("/merchant/orders/", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	prs := make([]*PaymentResponse, 0)
+	if err := unmarshalJSON(resp.Body, &prs); err != nil {
+		return nil, err
+	}
+	return prs, nil
 }
 
 // PaymentStatus ...
@@ -60,7 +74,7 @@ func (ps *PaymentsService) PaymentStatus(notificationToken string) (*PaymentStat
 
 // CreatePayment creates a new payment and returns the URLs to complete the payment.
 func (ps *PaymentsService) CreatePayment(p *Payment) (*PaymentResponse, error) {
-	resp, err := ps.client.PostForm("/payments", p.Params())
+	resp, err := ps.client.PostForm("/merchant/orders/", p.Params())
 	if err != nil {
 		return nil, err
 	}
@@ -69,36 +83,31 @@ func (ps *PaymentsService) CreatePayment(p *Payment) (*PaymentResponse, error) {
 	if err := unmarshalJSON(resp.Body, &pr); err != nil {
 		return nil, err
 	}
+
 	return &pr, nil
 }
 
 // Payment represents the payment form requires by khipu to make a payment POST
 type Payment struct {
-	MerchantInvoiceID string  `json:"merchantInvoiceID"`
-	Amount            float64 `json:"amount"`
-	CurrencyType      string  `json:"currency_type"`
-	Description       string  `json:"description"`
-
-	PostbackURL string `json:"postbackURL"`
-	ReturnURL   string `json:"returnUrl"`
-
-	TransactionTimeDateStamp time.Time `json:"transactionTimeDateStamp"`
-	Timeout                  int32     `json:"timeout"`
+	Currency        string `json:"currency"`
+	Description     string `json:"description"`
+	MerchantOrderId string `json:"merchant_order_id"`
+	NotifyURL       string `json:"notify_url"`
+	Price           int64  `json:"price"`
+	ReturnURL       string `json:"return_url"`
+	Timeout         int32  `json:"timeout"`
 }
 
 // Params returns a map used to sign the requests
 func (p *Payment) Params() url.Values {
 	form := url.Values{
-		"merchantInvoiceID": {p.MerchantInvoiceID},
-		"amount":            {fmt.Sprintf("%.2f", p.Amount)},
-		"currencyType":      {p.CurrencyType},
+		"currency":          {p.Currency},
 		"description":       {p.Description},
-
-		"postbackURL": {p.PostbackURL},
-		"returnURL":   {p.ReturnURL},
-
-		"transactionsTimeDateStamp": {p.TransactionTimeDateStamp.String()},
-		"timeout":                   {fmt.Sprintf("%d", p.Timeout)},
+		"merchant_order_id": {p.MerchantOrderId},
+		"notify_url":        {p.NotifyURL},
+		"price":             {fmt.Sprintf("%d", p.Price)},
+		"return_url":        {p.ReturnURL},
+		"timeout":           {fmt.Sprintf("%d", p.Timeout)},
 	}
 
 	return form
@@ -106,9 +115,17 @@ func (p *Payment) Params() url.Values {
 
 // PaymentResponse represents the information returned by 46d's api after a payment action
 type PaymentResponse struct {
-	TransactionTimeDateStamp time.Time `json:"transactionTimeDateStamp"`
-	TransactionID            string    `json:"transactionID"`
-	RedirectURL              string    `json:"redirectURL"`
+	ID              string      `json:"id"`
+	Merchant        int32       `json:"merchant"`
+	Price           floatString `json:"price"`
+	Description     string      `json:"description"`
+	MerchantOrderId string      `json:"merchant_order_id"`
+	CreationDate    time.Time   `json:"creation_date"`
+	ReturnURL       string      `json:"return_url"`
+	RedirectURL     string      `json:"redirectURL"`
+	Status          string      `json:"status"`
+	NotifyURL       string      `json:"notify_url"`
+	Timeout         int32       `json:"timeout"`
 }
 
 type floatString float64
@@ -129,13 +146,29 @@ func (fs *floatString) UnmarshalJSON(b []byte) error {
 // UnmarshalJSON unmarshal struct
 func (p *PaymentResponse) UnmarshalJSON(b []byte) error {
 	raw := struct {
-		TransactionTimeDateStamp *time.Time `json:"transactionTimeDateStamp"`
-		TransactionID            *string    `json:"transactionID"`
-		RedirectURL              *string    `json:"redirectURL"`
+		ID              *string      `json:"id"`
+		Merchant        *int32       `json:"merchant"`
+		Price           *floatString `json:"price"`
+		Description     *string      `json:"description"`
+		MerchantOrderId *string      `json:"merchant_order_id"`
+		CreationDate    *time.Time   `json:"creation_date"`
+		ReturnURL       *string      `json:"return_url"`
+		RedirectURL     *string      `json:"redirectURL"`
+		Status          *string      `json:"status"`
+		NotifyURL       *string      `json:"notify_url"`
+		Timeout         *int32       `json:"timeout"`
 	}{
-		TransactionTimeDateStamp: &p.TransactionTimeDateStamp,
-		TransactionID:            &p.TransactionID,
-		RedirectURL:              &p.RedirectURL,
+		ID:              &p.ID,
+		Merchant:        &p.Merchant,
+		Price:           &p.Price,
+		Description:     &p.Description,
+		MerchantOrderId: &p.MerchantOrderId,
+		CreationDate:    &p.CreationDate,
+		ReturnURL:       &p.ReturnURL,
+		RedirectURL:     &p.RedirectURL,
+		Status:          &p.Status,
+		NotifyURL:       &p.NotifyURL,
+		Timeout:         &p.Timeout,
 	}
 
 	if err := json.Unmarshal(b, &raw); err != nil {

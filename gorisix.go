@@ -13,12 +13,13 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var baseURL = url.URL{
-	Scheme: "https",
-	Host:   "khipu.com",
-	Path:   "api/2.0",
+	Scheme: "http",
+	Host:   "testapi.pago46.com",
+	Path:   "",
 }
 
 // Client represents an 46d's REST API.
@@ -27,11 +28,11 @@ type Client struct {
 }
 
 // NewClient returns an instance of 46d that is the client to make payment request
-func NewClient(secret string, receiverID int) *Client {
+func NewClient(merchantSecret string, merchantKey string) *Client {
 	hclient := httpClient{
 		client: &http.Client{},
-		secret: secret,
-		recid:  receiverID,
+		secret: merchantSecret,
+		key:    merchantKey,
 	}
 
 	return &Client{
@@ -86,14 +87,13 @@ func (err *ValidationError) Error() string {
 type httpClient struct {
 	client *http.Client
 	secret string
-	recid  int
+	key    string
 }
 
 func (hc *httpClient) Do(req *http.Request, values url.Values) (*http.Response, error) {
-	hc.signRequest(req, values)
-
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("merchant-key", hc.key)
+	hc.signRequest(req, values)
 
 	resp, err := hc.client.Do(req)
 	if err != nil {
@@ -159,9 +159,15 @@ var percentEncode = strings.NewReplacer(
 
 func (hc *httpClient) signRequest(req *http.Request, values url.Values) {
 	var buff bytes.Buffer
+	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
+
+	buff.WriteString(hc.key)
+	buff.WriteByte('&')
+	buff.WriteString(strconv.Itoa(int(timestamp)))
+	buff.WriteByte('&')
 	buff.WriteString(url.QueryEscape(req.Method))
 	buff.WriteByte('&')
-	buff.WriteString(url.QueryEscape(req.URL.Scheme + "://" + req.URL.Host + req.URL.Path))
+	buff.WriteString(url.QueryEscape(req.URL.Path))
 
 	if values != nil {
 		buff.WriteByte('&')
@@ -172,13 +178,11 @@ func (hc *httpClient) signRequest(req *http.Request, values url.Values) {
 	sig.Write(buff.Bytes())
 
 	sign := hex.EncodeToString(sig.Sum(nil))
-
 	buff.Reset()
-	buff.WriteString(strconv.Itoa(hc.recid))
-	buff.WriteByte(':')
 	buff.WriteString(sign)
 
-	req.Header.Set("Authorization", buff.String())
+	req.Header.Set("message-hash", buff.String())
+	req.Header.Set("message-date", strconv.Itoa(int(timestamp)))
 }
 
 func unmarshalJSON(r io.ReadCloser, v interface{}) error {
@@ -188,5 +192,6 @@ func unmarshalJSON(r io.ReadCloser, v interface{}) error {
 	if err != nil {
 		return err
 	}
+
 	return json.Unmarshal(body, v)
 }

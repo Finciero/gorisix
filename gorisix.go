@@ -17,7 +17,7 @@ import (
 )
 
 var baseURL = url.URL{
-	Scheme: "http",
+	Scheme: "https",
 	Host:   "testapi.pago46.com",
 	Path:   "",
 }

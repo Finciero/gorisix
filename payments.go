@@ -55,21 +55,19 @@ func (ps *PaymentsService) Payments() ([]*PaymentResponse, error) {
 	return prs, nil
 }
 
-// PaymentStatus ...
-func (ps *PaymentsService) PaymentStatus(notificationToken string) (*PaymentStatusChangeResponse, error) {
-	values := url.Values{"notification_token": {notificationToken}}
-
-	resp, err := ps.client.Get("/payments?"+values.Encode(), values)
+// PaymentStatus method to get status of an active payment.
+func (ps *PaymentsService) PaymentStatus(notification NotificationResponse) (*PaymentResponse, error) {
+	resp, err := ps.client.Get("/merchant/notification/"+notification.ID, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	var pscr PaymentStatusChangeResponse
-	if err := unmarshalJSON(resp.Body, &pscr); err != nil {
+	var pr PaymentResponse
+	if err := unmarshalJSON(resp.Body, &pr); err != nil {
 		return nil, err
 	}
 
-	return &pscr, nil
+	return &pr, nil
 }
 
 // CreatePayment creates a new payment and returns the URLs to complete the payment.
@@ -178,13 +176,9 @@ func (p *PaymentResponse) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// PaymentStatusChangeRequest represents the information returned by 46d's when a payment has changes status.
-type PaymentStatusChangeRequest struct {
-	NotificationTimeStamp time.Time `json:"notificationTimeStamp"`
-	NotificationID        string    `json:"notificationID"`
-}
-
-// PaymentStatusChangeResponse represents a success response defined by 46d.
-type PaymentStatusChangeResponse struct {
-	Result string `json:"result"`
+// NotificationResponse represents a sent notification from 46d.
+type NotificationResponse struct {
+	ID         string `json:"notification_id"`
+	Date       string `json:"date"`
+	MerchantID string `json:"merchant_id"`
 }
